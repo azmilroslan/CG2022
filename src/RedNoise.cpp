@@ -15,12 +15,13 @@
 #include <cmath>
 
 //h = 320
-#define WIDTH 320
-#define HEIGHT 320
+#define WIDTH 640
+#define HEIGHT 480
 
 glm::vec3 cam = glm::vec3(0.0, 0.0, 8.0);
+float focalLength = 2.0;
 glm::vec3 lightSource = glm::vec3(0.0, 2.0, 0.0);
-glm::mat3 camOrientation = glm::mat3(1, 0, 0,
+glm::mat3 camOrientation = glm::mat3(-1, 0, 0,
                                      0, 1, 0,
                                      0, 0, 1);
 int orbit;
@@ -39,8 +40,6 @@ void printVector(std::vector<float> input, std::string name){
     }
     std::cout << std::endl;
 }
-
-//\
 
 std::vector<float> interpolateSingleFloats(float from, float to, float numberOfValues){
     if (numberOfValues < 0 ){
@@ -101,6 +100,14 @@ void getCamera(glm::vec3 input, glm::vec3 offset){
     cam = input + offset;
 }
 
+void getFocal(float input, float offset){
+    focalLength = input + offset;
+}
+
+void rotateCamera(glm::vec3 input, glm::mat3 offset){
+    cam = offset * input;
+}
+
 void resetOrientation(){
     camOrientation = glm::mat3(1, 0, 0,
                                0, -1, 0,
@@ -122,10 +129,6 @@ void lookAt(glm::vec3 target){
                               right.z, up.z, forward.z);
 
     camOrientation = camOrientation * mat;
-}
-
-void rotateCamera(glm::vec3 input, glm::mat3 offset){
-    cam = offset * input;
 }
 
 void setDepthToZero(){
@@ -168,51 +171,45 @@ void drawLine(DrawingWindow &window, CanvasPoint start, CanvasPoint end, float l
         for (int i = 0; i < stepSizes[4]; ++i) {
             float x = stepSizes[0] + (stepSizes[2]*(float)i);
             float y = stepSizes[1] + (stepSizes[3]*(float)i);
-            window.setPixelColour((int) round(x), (int) round(y), colour);
+            if (x > WIDTH || x < 0 || y > HEIGHT || y < 0){
+                continue;
+            } else {
+                window.setPixelColour((int) round(x), (int) round(y), colour);
+            }
         }
     } else {
-//        float y = start.y;
-//        float x = start.x;
-        for (float i = 0; i < zDepth.size(); ++i) {
+        for (float i = 0; i < stepSizes[4]; ++i) {
             float x = stepSizes[0] + (stepSizes[2]*(float)i);
             float y = start.y;
-            if (x >= start.x && x <= end.x && x >= 0 && x <= WIDTH){
-                if (depth[(int)round(y)][(int)round(x)] == 0){
-                    if (round(x) >= start.x && round(x) <= end.x){
+            if (x > WIDTH || x < 0 || x < start.x || x > end.x || y > HEIGHT || y < 0){
+                continue;
+            }
+//            if (x >= start.x && x <= end.x && x >= 0 && x <= WIDTH){
+            if (depth[(int)round(y)][(int)round(x)] == 0){
+                if (round(x) >= start.x && round(x) <= end.x){
+                    if (x > WIDTH || x < 0 || x < start.x || x > end.x || y > HEIGHT || y < 0){
+                        continue;
+                    } else {
                         window.setPixelColour((int) round(x), (int) round(y), colour);
                         depth[(int)round(y)][(int)round(x)] = zDepth[(int)round(i)];
                     }
-                } else {
-                    if (zDepth[(int)round(i)] >= depth[(int)round(y)][(int)round(x)]){
-                        if (round(x) >= start.x && round(x) <= end.x) {
-                            window.setPixelColour((int)round(x), (int)round(y), colour);
+                }
+            } else {
+                if (zDepth[(int)round(i)] >= depth[(int)round(y)][(int)round(x)]){
+                    if (round(x) >= start.x && round(x) <= end.x) {
+                        if (x > WIDTH || x < 0 || x < start.x || x > end.x || y > HEIGHT || y < 0){
+                            continue;
+                        } else {
+                            window.setPixelColour((int) round(x), (int) round(y), colour);
                             depth[(int)round(y)][(int)round(x)] = zDepth[(int)round(i)];
                         }
-                    }else continue;
-                }
+                    }
+                }else continue;
             }
+//            }
         }
     }
 
-}
-
-void fill(DrawingWindow &window, CanvasPoint start, CanvasPoint end, float leftZ, float rightZ, uint32_t colour){
-    float y = start.y;
-    std::vector<float> zDepth = interpolateSingleFloats(leftZ, rightZ, abs((int)(start.x - end.x)));
-    std::vector<float> xCoord = interpolateSingleFloats(start.x, end.x, abs((int)(start.x - end.x)));
-    printVector(xCoord, "xCoord");
-//    int i = 0;
-    for (float i = 0; i < zDepth.size(); ++i) {
-        if (zDepth[(int)round(i)] > depth[(int)round(y)][(int)xCoord[i]]){
-            window.setPixelColour((int)xCoord[i], (int)round(y), colour);
-            depth[(int)round(y)][(int)xCoord[i]] = zDepth[(int)round(i)];
-        } else if (zDepth[(int)round(i)] == depth[(int)round(y)][(int)xCoord[i]]){
-            window.setPixelColour((int)xCoord[i], (int)round(y), colour);
-            depth[(int)round(y)][(int)xCoord[i]] = zDepth[(int)round(i)];
-        } else {
-            continue;
-        }
-    }
 }
 
 void drawTexture(DrawingWindow &window, CanvasPoint start, CanvasPoint end, std::vector<std::vector<uint32_t>> matrix){
@@ -592,7 +589,7 @@ float surfaceToLightLength(glm::vec3 ray){
 
 glm::vec3 computeRay(int x, int y){
 
-    float inverseFocal = -1/(2.0 * 80);
+    float inverseFocal = -1/(focalLength * 80);
     glm::mat3 camOrient = glm::inverse(camOrientation);
     float x_c = (x - (WIDTH/2)) * inverseFocal;
     float y_c = (y - (HEIGHT/2)) * inverseFocal;
@@ -608,7 +605,7 @@ CanvasPoint getCanvasIntersectionPoint(glm::vec3 cameraPosition, glm::vec3 verte
     float xOutput;
     float yOutput;
 //    glm::mat4 view = lookAt(cameraPosition, glm::vec3(0, 0, 0));
-    lookAt(glm::vec3(0, 0, 0));
+//    lookAt(glm::vec3(0, 0, 0));
     glm::vec3 vertex = vertexPosition - cameraPosition;
     glm::vec3 vertexConverted = vertex * camOrientation;
 
@@ -775,7 +772,7 @@ void drawRaster(DrawingWindow &window, const std::string& objfile, const std::st
             for (int j = 0; j < 3; ++j) {
                 CanvasPoint screen = getCanvasIntersectionPoint(cameraPosition,
                                                                 model.vertices[j],
-                                                                2.0);
+                                                                focalLength);
                 temp.push_back(screen);
             }
 //            std::cout << model.colour.name << std::endl;
@@ -890,7 +887,7 @@ void drawWireframe(DrawingWindow &window, const std::string& objfile, const std:
             for (int j = 0; j < 3; ++j) {
                 CanvasPoint screen = getCanvasIntersectionPoint(cameraPosition,
                                                                 model.vertices[j],
-                                                                2.0);
+                                                                focalLength);
                 temp.push_back(screen);
             }
 //            std::cout << model.colour.name << std::endl;
@@ -1020,7 +1017,7 @@ void drawRayTrace(DrawingWindow &window, const std::string& objfile, const std::
     for (int y = 0; y < HEIGHT; ++y) {
         for (int x = 0; x < WIDTH; ++x) {
 //            std::cout << "position pixel: " << "(" << x << ", " << y << ")" << std::endl;
-            lookAt(glm::vec3(0, 0, 0));
+//            lookAt(glm::vec3(0, 0, 0));
             float focalLength = 2.0;
             uint32_t black = (0 << 24) + (0 << 16) + (0 << 8) + 0;
             uint32_t colour_t = black;
@@ -1087,10 +1084,10 @@ void handleEvent(SDL_Event event, DrawingWindow &window) {
             getLight(lightSource, glm::vec3(0.0, 0.1, 0.0));
 //            depth.clear();
             window.clearPixels();
-        } else if (event.key.keysym.sym == 113) { // Q - zoom in
+        } else if (event.key.keysym.sym == 113) { // Q - cam forward
             getCamera(cam, glm::vec3(0.0, 0.0, -0.1));
             window.clearPixels();
-        } else if (event.key.keysym.sym == 101) { // E - zoom out
+        } else if (event.key.keysym.sym == 101) { // E - cam backward
             getCamera(cam, glm::vec3(0.0, 0.0, 0.1));
             window.clearPixels();
         } else if (event.key.keysym.sym == 114) { // R - Reset
@@ -1100,10 +1097,11 @@ void handleEvent(SDL_Event event, DrawingWindow &window) {
             } else if (mode == 1){
                 cam = glm::vec3(0.0, 0.0, 8.0);
                 lightSource = glm::vec3(0.0, 2.0, 0.0);
-            } else if (mode == 0){
+            } else if (mode == 2){
                 cam = glm::vec3(0.0, 0.0, 4.0);
             }
-            camOrientation = glm::mat3(1, 0, 0,
+            lookAt(glm::vec3(0, 0, 0));
+            camOrientation = glm::mat3(-1, 0, 0,
                                        0, 1, 0,
                                        0, 0, 1);
             //            depth.clear();
@@ -1124,6 +1122,22 @@ void handleEvent(SDL_Event event, DrawingWindow &window) {
                                                     sin(0.017453),  cos(0.017453), 0,
                                                     0, 0, 1));
             window.clearPixels();
+        } else if (event.key.keysym.sym == 116) { // T - rotate light about x-axis
+            rotateLight(lightSource, glm::mat3(1, 0, 0,
+                                        0, cos(0.017453), (-1 * sin(0.017453)),
+                                        0, sin(0.017453), cos(0.017453)));
+            lookAt(glm::vec3(0, 0, 0));
+            window.clearPixels();
+        } else if (event.key.keysym.sym == 121) { // Y - rotate light about y-axis
+            rotateLight(lightSource, glm::mat3(cos(0.017453), 0, sin(0.017453),
+                                        0, 1, 0,
+                                        (-1 * sin(0.017453)), 0, cos(0.017453)));
+            window.clearPixels();
+        } else if (event.key.keysym.sym == 122) { // U - rotate light about z-axis
+            rotateLight(lightSource, glm::mat3(cos(0.017453), (-1 * sin(0.017453)), 0,
+                                        sin(0.017453),  cos(0.017453), 0,
+                                        0, 0, 1));
+            window.clearPixels();
         } else if (event.key.keysym.sym == 119) { // W camera up
             getCamera(cam, glm::vec3(0.0, 0.1, 0.0));
             window.clearPixels();
@@ -1135,6 +1149,12 @@ void handleEvent(SDL_Event event, DrawingWindow &window) {
             window.clearPixels();
         } else if (event.key.keysym.sym == 100) { // D camera right
             getCamera(cam, glm::vec3(0.1, 0.0, 0.0));
+            window.clearPixels();
+        } else if (event.key.keysym.sym == 49) { // 1 - camera zoom in
+            getFocal(focalLength, 0.1);
+            window.clearPixels();
+        } else if (event.key.keysym.sym == 50) { // 2 - camera zoom out
+            getFocal(focalLength, -0.1);
             window.clearPixels();
         } else if (event.key.keysym.sym == 108) { // L - lookAt()
             window.clearPixels();
@@ -1151,11 +1171,14 @@ void handleEvent(SDL_Event event, DrawingWindow &window) {
             if (mode == 0){
                 getCamera(cam, glm::vec3(0.0, 0.0, 5.2));
                 mode = 1;
+                lookAt(glm::vec3(0, 0, 0));
             } else if (mode == 1){
                 getCamera(cam, glm::vec3(0.0, 0.0, -5.2));
                 mode = 2;
+                lookAt(glm::vec3(0, 0, 0));
             } else if (mode == 2){
                 mode = 0;
+                lookAt(glm::vec3(0, 0, 0));
             }
         }
     } else if (event.type == SDL_MOUSEBUTTONDOWN) {
@@ -1170,7 +1193,7 @@ int main(int argc, char *argv[]) {
 	SDL_Event event;
     orbit = 0;
     mode = 1;
-
+    int index = 0;
 	while (true) {
 		// We MUST poll for events - otherwise the window will freeze !
 		if (window.pollForInputEvents(event)) handleEvent(event, window);
@@ -1190,6 +1213,7 @@ int main(int argc, char *argv[]) {
             rotateCamera(cam, glm::mat3(cos(0.017453), 0, sin(0.017453),
                                         0, 1, 0,
                                         (-1 * sin(0.017453)), 0, cos(0.017453)));
+            lookAt(glm::vec3(0, 0, 0));
             if (mode == 0){
                 drawRaster(window,  "cornell-box.obj", "cornell-box.mtl", cam);
             } else if (mode == 1) {
@@ -1200,6 +1224,8 @@ int main(int argc, char *argv[]) {
         }
 		// Need to render the frame at the end, or nothing actually gets shown on the screen !
 		window.renderFrame();
+//        window.savePPM("savedOutput/" + std::to_string(index) + ".ppm");
+        index++;
 	}
 
 }
